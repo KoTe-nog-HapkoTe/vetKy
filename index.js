@@ -1,5 +1,8 @@
 const TelegramApi = require('node-telegram-bot-api')
 
+const sequelize = require('./bd');
+const UserModel = require('./models');
+
 const token = "7625955054:AAGcoco25FpNayUNavNnlREDRg4EiVCGnnc"
 
 const bot = new TelegramApi(token, {polling: true})
@@ -38,25 +41,42 @@ const startGame = async (chatId) => {
     await bot.sendMessage(chatId, 'есть', gameOption)
 }
 
-const start = () =>{
+const start = async () =>{
+
+    try{
+        await sequelize.authenticate()
+        await sequelize.sync()
+
+    } catch (e){
+        console.log('нет родключения', e)
+    }
+
     bot.on('message', async msg =>{
         const text = msg.text;
         const chatId = msg.chat.id;
         //console.log(msg);
+
+        try{
+            if (text == '/start'){
+                await UserModel.create({chatId})
+                return bot.sendMessage(chatId,`ё`);
+            }
         
-        if (text == '/start'){
-            return bot.sendMessage(chatId,`ё`);
-        }
+            if (text == '/info'){
+                const user  = await UserModel.findOne({chatId})
+                return bot.sendMessage(chatId, `у ${msg.from.first_name} ${user.right} правильных и ${user.wrong} неправильных` )
+            }
     
-        if (text == '/info'){
-            return bot.sendMessage(chatId, `ты ${msg.from.first_name}`)
-        }
+            if (text == '/game'){
+                return startGame(chatId);
+            }
+    
+            return bot.sendMessage(chatId, 'хз что это')
 
-        if (text == '/game'){
-            return startGame(chatId);
+        }catch(e) {
+            return bot.sendMessage(chatId, `ошибка с бд ${e}`);
         }
-
-        return bot.sendMessage(chatId, 'хз что это')
+        
     
     })
 
@@ -70,14 +90,18 @@ const start = () =>{
             return startGame(chatId);
         }
 
+        const user = await UserModel.findOne({chatId})
         
         
-        if (data === chat[chatId]){
-            return  bot.sendMessage(chatId, `угадал ${chat[chatId]}`, gameOptionAgain)
+        if (data == chat[chatId]){
+            user.right += 1;
+            await  bot.sendMessage(chatId, `угадал ${chat[chatId]}`, gameOptionAgain)
         }
         else{
-            return bot.sendMessage(chatId, `не угадал ${chat[chatId]}`, gameOptionAgain)
+            user.wrong += 1;
+            await bot.sendMessage(chatId, `не угадал ${chat[chatId]}`, gameOptionAgain)
         }
+        await user.save();
 
         //bot.sendMessage(chatId, `${data}`)
         //console.log(msg)
